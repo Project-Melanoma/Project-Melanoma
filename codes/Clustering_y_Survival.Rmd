@@ -1,0 +1,368 @@
+---
+title: "Clustering Proyecto"
+author: "Alex Muñoz"
+date: "30/4/2021"
+output: html_document
+---
+
+```{r}
+library(factoextra)
+library(openxlsx)
+library(dplyr)
+library(FactoMineR)
+setwd("C:\\Users\\Jose Giner\\OneDrive\\Escritorio\\PR3")
+data = read.xlsx("Melanoma_v4.xlsx")
+data = data %>% filter(Melanoma_familiar != 88 & Páncreas_familiar != 88 & Nevuspre != 88 & Páncreas_familiar != 88 &CancerFam != 88 & Quemaduras_areaMM != 88 & Léntigos_en_área_de_MM  != 88 &  Fotolocalización  != 88 & TipoHX != 88 & Ulceración !=88 & Satelitosis != 88 & Regresión != 88 & Invasión_vascular != 88)
+```
+
+```{r}
+#Discretización de variables continuas 
+data$IMC.1 = cut(data$IMC, breaks = c(-Inf,25,30,Inf), labels = c("Normal","Sobrepeso","Obesidad"))
+
+data$IMC.1 = factor(data$IMC.1,levels=c("Normal","Sobrepeso","Obesidad"))
+
+data$Edad.1 = cut(data$Edad, breaks = c(0,30,65,150), labels = c("joven","adulto","persona_mayor"))
+
+data$Edad.1 = factor(data$Edad.1,levels=c("joven","adulto","persona_mayor"))
+
+data$Añosprofsol.1=cut(data$Añosprofsol, breaks = c(-Inf,20,40,Inf), labels = c("Nada","Bajo","Considerable"))
+
+data$Añosprofsol.1 = factor(data$Añosprofsol.1,levels=c("Nada","Bajo","Considerable"))
+
+data$Añospaquete.1=cut(data$Añospaquete, breaks = c(-Inf,20,40,Inf), labels = c("Nada","Bajo","Considerable"))
+
+data$Añospaquete.1 = factor(data$Añospaquete.1,levels=c("Nada","Bajo","Considerable"))
+
+data$Breslow.1 = cut(data$Breslow, breaks = c(-Inf,1,2,4,87,Inf), labels = c("T1","T2","T3","T4","88"))
+
+data$Breslow.1 = factor(data$Breslow.1,levels=c("T1","T2","T3","T4","88"))
+
+data$Mitosis.1 = cut(data$Mitosis, breaks = c(-Inf,0,10,40,88), labels = c("Nada","Poco","Considerable","88"))
+
+data$Mitosis.1 = factor(data$Mitosis.1,levels=c("Nada","Poco","Considerable","88"))
+
+
+#Reagrupación de fototipos
+data = data %>% mutate(Fototipo.1 = recode(Fototipo,
+`0` = '1',
+`1` = '1',
+`2` = '2',
+`3` = '3',
+`4` = '4',
+`5` = '4'))
+
+data$Fototipo.1 = factor(data$Fototipo.1)
+```
+
+```{r}
+#eliminar variables supervivencia + id + grupo_etio
+data.1 = data %>% select(-1,-33,-41:-49)
+#Variables AFC --> factor
+data.afc = data.1 %>% select(-2:-6,-10:-11,-32,-35)
+data.afc[colnames(data.afc)] <- lapply(data.afc[,colnames(data.afc)], factor)
+str(data.afc)
+```
+
+
+## AFC
+
+We'll continue building an MCA model with the original categorical and the categorized variables we have created before.  
+
+```{r}
+res.mca = MCA(data.afc, graph = FALSE)
+print(res.mca)
+```
+```{r}
+fviz_screeplot(res.mca, addlabels = TRUE, ylim = c(0, 10),ncp=20)
+var = get_mca_var(res.mca)
+```
+From the screeplot we can see that the first components don't explain too much variability of data, so we can conclude that data is very spread and no redundant information is present. In other words, the correlation between variables isn't very strong so no linear combinations can reduce the dimensionality of the data. 
+
+
+```{r}
+fviz_mca_var(res.mca, col.var = "cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel=TRUE, select.var = list(cos2 = 0.29))
+```
+When we visualize the correlation of the variables with the first and second components, we can observe that some features such as Localización_5, Quemaduras_en_area_MM_2, Quemaduras_en_area_MM_1 or tipoHX_4 are highly correlated with first component.This might mean that these attributes are significantly correlated with each other and they tend to take this value when the other features present this specific categories, whereas Fotolocalización_3, Qactínicas_1, Qactínicas_2, Léntigos_en_área_de_MM_1, Localización_1  Léntigos_en_área_de_MM_2 or persona_mayor result in significant correlation with component number 2. The explanation is similar to the one for the first component.  
+
+```{r}
+fviz_mca_var(res.mca, col.var = "contrib",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel=TRUE, select.var = list(cos2 = 0.29), axes=c(3,4))
+```
+Now we display the loading plot for those variables highly correlated with the third and fourth component. It is interesting to note that patients with redhead (Pelo_3) and 2 polymorphisms (MC1R_RHC_2) have a high contribution to dimension 4. Opposite scores for dimension 3 can be appreciated with Breslow stages 1 and 4, separating those cases with low and high cancer development. Having a high Breslow thickness (T4) is a potential indicatior of suffering skin ulcers as seen from their similar location in the plot and low Breslow thickness has some relation with having no skin ulcers. We could suspect that the third dimension is distinguishing those high risk melanoma contenders with the ones at lower risk.
+
+```{r}
+fviz_mca_biplot(res.mca,repel = TRUE,habillage = factor(data$Grupo_etiopatogénico), label="var",select.var=list(cos2=20),axes=c(1,2)) + theme_minimal() + ggtitle("")
+```
+From this biplot of variables and individuals , we can see the influence of the variables most correlated with the two first components on groups of individuals that are away from the origin on the direction of the effect of the features, which can be positive or negative. 
+
+```{r}
+fviz_contrib(res.mca, choice = "var", axes = 1:2, top = 15)
+```
+If we focus on the contributions of the variables for the first and second components now, we realize that most of the features we determined before are remarkably correlated with these two are those and contribute to their creation. 
+# ANÁLISIS CLUSTERING
+
+```{r}
+data.clus = data %>% select(2:32,34:40)
+cat_vars = data.clus %>% select(-2:-5,-10,-11,-32,-35)
+data.clus[colnames(cat_vars)] = lapply(data.clus[,colnames(cat_vars)], factor)
+str(data.clus)
+```
+```{r}
+library(cluster)
+gower_dist = daisy(data.clus, metric = "gower")
+gower_matrix = as.matrix(gower_dist)
+```
+
+## Kmeans -----> Ignore method
+
+```{r}
+SSE = rep(0, 15)
+for (k in 1:15) {
+  set.seed(42)
+  grupos = kmeans(gower_matrix, k)
+  SSE[k] = grupos$tot.withinss
+}
+```
+```{r}
+wss = data.frame(k = 1:15, wss=SSE)
+ggplot(wss, aes(k,wss))+geom_line()+geom_point()
+```
+```{r}
+silhouette_score <- function(k){
+  km <- kmeans(gower_matrix, centers = k, nstart=25)
+  ss <- silhouette(km$cluster, gower_dist)
+  mean(ss[, 3])
+}
+k <- 2:15
+avg_sil <- sapply(k, silhouette_score)
+plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette Scores', frame=FALSE)
+```
+
+```{r}
+set.seed(101)
+res.km = kmeans(gower_matrix, centers = 8)
+```
+```{r}
+sil  = silhouette(res.km$cluster,gower_dist)
+avg_sil = mean(sil[,3])
+data$km_cluster = res.km$cluster
+table(data$km_cluster,data$Grupo_etiopatogénico)
+#data = data %>% select(-1,-41:-56)
+write.xlsx(data,"C:/Users/Alex/Downloads/Kmeans_melanoma.xlsx")
+```
+
+```{r}
+fviz_mca_ind(res.mca, habillage=factor(data$Grupo_etiopatogénico),label=FALSE)
+```
+```{r}
+fviz_mca_ind(res.mca, habillage=factor(km_clus), label=FALSE)
+```
+## Evaluation
+```{r}
+dunn_km = dunn(clusters = res.km$cluster,Data=gower_matrix)
+```
+
+
+## K-Modes (8 clusters)
+
+First we determine the optimal number of clusters by observing the change in ASS from the groups created. Here, 8 clusters seems a pretty good selection.
+```{r}
+silhouette_score <- function(k){
+  pam <- pam(gower_dist, k = k, diss=TRUE)
+  pam$silinfo$avg.width
+}
+k <- 2:15
+avg_sil <- sapply(k, silhouette_score)
+plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette Scores', frame=FALSE)
+```
+
+Algorithm is performed from gower distances and we select k = 8
+```{r}
+pam_fit <- pam(gower_dist,
+diss = TRUE,
+k = 8)
+```
+
+
+Cluster assignment from the PAM algorithm is shown from our mca individual plot
+```{r}
+fviz_mca_ind(res.mca, habillage=factor(pam_fit$clustering), label=FALSE)
+```
+
+Dunn index is calculated as validation metric
+```{r}
+library(clValid)
+dunn_pam = dunn(clusters =pam_fit$clustering, Data=gower_matrix)
+```
+
+## KProto
+
+```{r}
+library(clustMixType)
+set.seed(12)
+scale_2sd <- function(x) {
+return((x - mean(x))/(2 * sd(x)))
+}
+dat_std <- data.clus %>% mutate_if(is.numeric, scale_2sd) #standardization for numerical variable only
+```
+## WSS
+
+```{r}
+# Elbow Method for finding the optimal number of clusters
+set.seed(123)
+# Compute and plot wss for k = 2 to k = 15.
+k.max <- 15 # to remove the rows with NA's
+wss <- sapply(2:k.max, 
+              function(k){kproto(dat_std, k)$tot.withinss})
+```
+
+```{r}
+plot(2:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+## Silhouette
+
+```{r, message=FALSE}
+k_opt <- validation_kproto(data = dat_std,k=2:15, method = "silhouette")
+```
+```{r}
+plot(8:11, k_opt$indices,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Average Silhouette")
+```
+
+## 8_prototypes
+
+```{r}
+set.seed(101)
+k.8 <- kproto(dat_std, 8, lambda=0.67)
+```
+```{r}
+k8_clus = k.8$cluster
+table(k8_clus)
+```
+
+```{r}
+fviz_mca_ind(res.mca, habillage=factor(k8_clus), label=FALSE)
+```
+```{r}
+set.seed(101)
+kp.11 <- kproto(dat_std, k =11 ,lambda=0.67, keep.data = TRUE)
+```
+```{r}
+k11_clus = kp.11$cluster
+table(k11_clus)
+```
+```{r}
+fviz_mca_ind(res.mca, habillage=factor(k11_clus), label=FALSE)
+```
+
+
+
+```{r}
+
+dunn_kp8 = dunn(clusters = k.8$cluster,Data=dat_std)
+dunn_kp11 = dunn(clusters = kp.11$cluster,Data=dat_std)
+
+```
+
+
+
+##Survival analysis
+
+```{r}
+data.clus$Cluster = factor(pam_fit$clustering)
+ids = data$N_ID
+data.clus$ID = ids
+```
+
+```{r}
+dataSup = read.xlsx("C:/Users/Jose Giner/OneDrive/Escritorio/PR3/Melanoma_v2.xlsx")
+
+dataClustering = data.clus %>% distinct(ID, .keep_all= TRUE)
+
+dataSup = dataSup %>% distinct(N_ID, .keep_all= TRUE)
+
+
+dataSup = dataSup[which(dataSup$N_ID  %in% dataClustering$ID ),]
+dataSup$Cluster = dataClustering$Cluster
+dataSup$Grupo.etiopatogénico = factor(dataSup$Grupo.etiopatogénico)
+summary(dataSup$Exitus)                  
+```
+
+
+```{r}
+dataSup$FActualización =convertToDate(dataSup$FActualización)
+dataSup$Fecha_diagnóstico =convertToDate(dataSup$Fecha_diagnóstico)
+dataSup$FExitus =convertToDate(dataSup$FExitus)
+
+
+#x <- interval(dataSup$FActualización, dataSup$Fecha_diagnóstico)
+dataSup$diasAct = as.numeric(dataSup$FActualización - dataSup$Fecha_diagnóstico)
+
+dataSup$diasExitus = as.numeric(dataSup$FExitus - dataSup$Fecha_diagnóstico)
+
+dataSup$diasMonitor = ifelse(is.na(dataSup$diasExitus),dataSup$diasAct , dataSup$diasExitus)
+indVal = which(dataSup$diasMonitor > 0)
+dataSupFinal = dataSup[indVal,c("Sexo","diasMonitor","Exitus","Grupo.etiopatogénico","Cluster", "Fototipo","Pelo")] 
+```
+
+
+
+```{r}
+library(survival)
+library(survminer)
+summary(dataSupFinal$Exitus)
+#survObject <- Surv(data$tiempo, data$evento)
+survObject <- Surv(dataSupFinal$diasMonitor, dataSupFinal$Exitus)
+dataSupFinal$Exitus
+fit <- survfit(survObject ~ Sexo, data = dataSupFinal)
+plot(fit)
+
+
+ggsurvplot(fit, data = dataSupFinal, palette =
+    c("#E7B800", "#2E9FDF"),legend.labs = c("Male", "Female"),xlab = "Time in days",ylim = c(0.7,1),risk.table = TRUE, risk.table.col = "strata", risk.table.height = 0.25, risk.table.y.text.col = T, ncensor.plot = TRUE,    ncensor.plot.height = 0.25, 
+  ggtheme = theme_bw())      # Change ggplot2 theme)
+```
+
+```{r}
+dataGroup = dataSupFinal %>% filter(Grupo.etiopatogénico != "Mucoso" & Grupo.etiopatogénico !=  "Mixto" & Grupo.etiopatogénico != "Primario desconocido")
+
+
+#survObject <- Surv(data$tiempo, data$evento)
+survObject <- Surv(dataGroup$diasMonitor, dataGroup$Exitus)
+survObject
+fit <- survfit(survObject ~ Grupo.etiopatogénico, data = dataGroup)
+
+ggsurvplot(fit, data = dataGroup,  ylim = c(0.6,1) , xlab = "Time in days", legend.labs =
+    c("Acral", "CSD", "Nevogénico","Nevogénico débil", "No Clasificable", "Non-risky") ,  ggtheme = theme_bw())      # Change ggplot2 theme)
+```
+
+
+
+
+```{r}
+survObject <- Surv(dataSupFinal$diasMonitor, dataSupFinal$Exitus)
+survObject
+fit <- survfit(survObject ~ Cluster, data = dataSupFinal)
+
+ggsurvplot(fit, data = dataSupFinal , ylim = c(0.7,1), xlab = "Time in days",  ggtheme = theme_bw())      # Change ggplot2 theme)
+```
+```{r}
+dataPelo = dataSupFinal %>% filter(Pelo != 99)
+survObject <- Surv(dataPelo$diasMonitor, dataPelo$Exitus)
+fit <- survfit(survObject ~ Pelo, data = dataPelo)
+
+ggsurvplot(fit, data = dataPelo ,ylim = c(0.6,1), xlab = "Time in days", ggtheme = theme_bw())
+```
+
+```{r}
+dataFototipo = dataSupFinal %>% filter(Fototipo != 99)
+survObject <- Surv(dataFototipo$diasMonitor, dataFototipo$Exitus)
+fit <- survfit(survObject ~ Fototipo, data = dataFototipo)
+
+ggsurvplot(fit, data = dataFototipo ,ylim = c(0.6,1), xlab = "Time in days", ggtheme = theme_bw())
+```
+

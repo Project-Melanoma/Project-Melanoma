@@ -1,0 +1,582 @@
+---
+title: "AE_melanoma"
+author: "Jose Giner"
+date: "5/4/2021"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Libraries used
+```{r}
+library(openxlsx)
+library(Hmisc)
+library(ggplot2)
+library(dplyr)
+```
+
+
+## Exploratory Analysis: Clinical pathways to melanoma development
+
+First we start by reading our data:
+```{r}
+setwd("C:\\Users\\Jose Giner\\OneDrive\\Escritorio\\PR3")
+data = read.xlsx("Melanoma_v4.xlsx")
+```
+
+Basic information about our data
+```{r pressure, echo=FALSE}
+dim(data)
+
+describe(data)
+colnames(data)
+```
+
+Peeking top and bottom of our data (with some cols)
+```{r}
+head(data[,c(1:6)])
+tail(data[,c(1:6)])
+```
+
+NAs are checked and trated 
+
+### Univariate analysis for continuous variables
+
+#### Edad
+```{r}
+data %>%
+    summarize(variable = "Edad", mean_edad = mean(Edad), st_dev_edad = sd(Edad))
+```
+
+Age distribution of patients
+```{r}
+data %>%
+    summarize(variable = "Edad",
+              q0.2 = quantile(Edad, 0.2),
+              q0.4 = quantile(Edad, 0.4),
+              q0.6 = quantile(Edad, 0.6),
+              q0.8 = quantile(Edad, 0.8)) 
+```
+
+```{r}
+data %>%
+    ggplot(aes(Edad)) +
+    geom_histogram(binwidth = 5, color = "black", fill = "dodgerblue2") +
+    geom_vline(xintercept = mean(data$Edad), lwd = 1) +
+    labs(title = "Distribution of age",
+         x = "Age",
+         y = "Number of patients") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(0,100,5))
+```
+
+#####
+Age distribution with respect to cancer localization variable
+```{r}
+names(data)[names(data) == "Localización"] <- "Loc"
+data = data %>% mutate(Loc= recode(Loc, 
+                         `1` = "Cabeza/cuello",
+                         `2` = "Extremidad superior",
+                         `3` = "Tronco",
+                         `4` = "Extremidad inferior",
+                         `5` = "Acral",
+                         `6` = "Mucosos",
+                         `7` = "Primario Desconocido"))
+
+data = data %>% mutate(Estadio_patológico= recode(Estadio_patológico, 
+                         `0` = "_in situ",                         
+                         `1` = "IA",
+                         `2` = "IB",
+                         `3` = "IIA",
+                         `4` = "IIB",
+                         `5` = "IIC",
+                         `6` = "IIIA",
+                         `7` = "IIIB",
+                         `8` = "IIIC",
+                         `9` = "IV",
+                         ))
+
+
+data %>%
+    ggplot(aes(Edad)) +
+    geom_histogram(binwidth = 5, color = "black", fill = "dodgerblue2") +
+    labs(title = "Distribution of age relative to etiopathogenic group",
+         x = "Age",
+         y = "Localización") + 
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(0,100,5)) +
+    facet_grid(Loc~., switch = "y") + theme(strip.text.y.left = element_text(angle = 0), 
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+```
+
+Localización en cabeza/cuello abundante para pacientes mayores
+
+Otra forma de verlo:
+
+```{r}
+library(ggridges)
+library(viridis)
+library(hrbrthemes)
+
+ggplot(data, aes(x = Edad, y = Loc, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 2.5, rel_min_height = 0.05) +
+  scale_fill_viridis(name = "Edad", option = "C") +
+  labs(title = 'Distribution of age relative to affected zone') + theme_ipsum() +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(50, "lines"),
+      strip.text.x = element_text(size = 8)
+    )
+```
+
+```{r}
+data %>%
+    group_by(Loc) %>%
+    summarize(mean_edad = mean(Edad), sd_edad = sd(Edad)) 
+```
+
+#### Localización
+
+```{r}
+data %>%
+    ggplot() +
+    geom_bar(aes(Loc), color = "black",fill = "dodgerblue2") +
+    coord_flip() +
+    labs(title = "Patients per cancer zone",
+         x = "Localización",
+         y = "Número de pacientes") +
+    theme_minimal() 
+```
+
+```{r}
+data %>%
+    group_by(Loc) %>%
+    summarize(frequency = n()) %>%
+    arrange(desc(frequency)) 
+```
+
+
+```{r}
+data_numeric = data %>%
+    select_if(is.numeric) 
+
+centesc = scale(data_numeric, center = TRUE, scale = TRUE)
+boxplot(centesc, col = "skyblue", las = 2, 
+        ylab = "n", main = "Centrando y escalando", cex.axis = 0.5)
+```
+
+
+```{r}
+data %>%
+    ggplot(aes(Grupo_etiopatogénico)) +
+    geom_bar(aes(fill = Loc)) +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+data %>% 
+    ggplot(aes(Grupo_etiopatogénico)) +
+    geom_bar(aes(fill = Loc), position = "fill") +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+data %>%
+    group_by(Loc, Grupo_etiopatogénico) %>%
+    summarize(frequency = n()) 
+```
+
+```{r}
+library(dplyr)
+table(data$Grupo_etiopatogénico,data$Loc)
+```
+
+```{r}
+data = data %>% mutate(Quemaduras= recode(Quemaduras, 
+                         `1` = "No ",
+                         `2` = "Si"))
+
+
+table(data$Quemaduras, data$Loc )
+```
+
+
+```{r}
+data = data %>% filter(Breslow != 88)
+data %>% ggplot(aes(x = Loc, y = Breslow)) + geom_boxplot() +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+data = data %>% mutate(Ganglio_centinela = recode(Ganglio_centinela,
+                         `1` = "Negativo",
+                         `2` = "Positivo",
+                         `3` = "No se identifica")) %>% filter(Ganglio_centinela != 88)
+
+
+table(data$Ganglio_centinela)
+
+
+data %>%
+    ggplot() +
+    geom_bar(aes(Ganglio_centinela), color = "black",fill = "dodgerblue2") +
+    coord_flip() +
+    labs(
+         x = "Gánglios linfáticos",
+         y = "Número de pacientes") +
+    theme_minimal() 
+```
+
+```{r}
+
+d_gang = data %>% filter(Ganglio_centinela != "88" & Breslow != "88")
+describe(d_gang$Ganglio_centinela)
+```
+
+
+```{r}
+d_gang %>% 
+    ggplot(aes(Grupo_etiopatogénico)) +
+    geom_bar(aes(fill = Ganglio_centinela)) +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+d_gang %>%
+    ggplot(aes(Breslow)) +
+    geom_histogram(binwidth = 3, color = "black",fill = "grey") +
+    labs(title = "Distribution of cancer thicknes",
+         x = "Breslow",
+         y = "Number of patients") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(0,25,3)) +
+    facet_grid(~Ganglio_centinela) 
+```
+
+
+
+```{r}
+d_gang %>% 
+    ggplot(aes(Grupo_etiopatogénico)) +
+    geom_bar(aes(fill = Recaida)) +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+data = data %>% mutate(Estadio = recode(Estadio,
+                         `0` = "In situ",
+                         `1` = "Enfermedad localizada",
+                         `2` = "Enfermedad locorrecional",
+                         `3` = "Enfermedad a distancia"))
+
+data = data %>% filter(Estadio != 7)
+
+data %>%
+    ggplot() +
+    geom_bar(aes(Estadio), color = "black", fill = "dodgerblue2") +
+    coord_flip() +
+    labs(title = "Patients per cancer zone",
+         x = "Estadio",
+         y = "Número de pacientes") +
+    theme_minimal() 
+```
+
+### Estadio vs Breslow
+```{r}
+data = data %>% mutate(Estadio = recode(Estadio,
+                         `0` = "In situ",
+                         `1` = "Enfermedad localizada",
+                         `2` = "Enfermedad locorrecional",
+                         `3` = "Enfermedad a distancia"))
+
+data = data %>% filter(Estadio != 7)
+
+
+ggplot(d_bres, aes(x= Breslow, group=Estadio , fill= Estadio)) +
+    geom_density(adjust=1.5) +
+    facet_wrap(~Estadio) +
+    theme(
+      legend.position="none",
+      axis.ticks.x=element_blank()
+    )
+```
+### Grupo etiopatogénico vs Breslow
+```{r}
+
+ggplot(d_bres, aes(x= Breslow, group=Grupo_etiopatogénico , fill= Grupo_etiopatogénico)) +
+    geom_density(adjust=1.5) +
+    facet_wrap(~Grupo_etiopatogénico) +
+    theme(
+      legend.position="none",
+      axis.ticks.x=element_blank())
+```
+
+```{r}
+library(viridis)
+library(hrbrthemes)
+
+data %>% ggplot(aes(Sexo)) + 
+    geom_bar(aes(fill=Exitus), position="dodge") +
+    scale_fill_viridis(discrete = T) +
+    ggtitle("Estudio de la supervivencia por zona y sexo") +
+    facet_wrap(~Loc) +
+    
+    theme() +
+    xlab("Sexo") + ylab("Pacientes")
+```
+
+```{r}
+data %>% ggplot(aes(Sexo)) + 
+    geom_bar(aes(fill = Exitus) , position="dodge") +
+    scale_fill_viridis(discrete = T) +
+    ggtitle("Estudio de la supervivencia según el estadio y sexo") +
+    facet_wrap(~Estadio) +
+    
+    theme() +
+    xlab("Sexo") + ylab("Pacientes")
+```
+
+```{r}
+data %>% ggplot(aes(Estadio)) + 
+    geom_bar(aes(fill = Exitus) , position="fill") +
+    scale_fill_viridis(discrete = T) +
+    ggtitle("Estudio de la supervivencia el estadio") +
+    theme() +
+    xlab("Estadio") + ylab("Proporción") +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+data %>% filter(!is.na(Estadio_patológico)) %>% 
+  ggplot(aes(Estadio_patológico)) + 
+    geom_bar(aes(fill = Exitus) , position="fill") +
+    scale_fill_viridis(discrete = T) +
+    ggtitle("Estudio de la supervivencia según el estadio patológico") +
+    theme() +
+    xlab("Estadio Patológico") + ylab("Proporción") +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+d_mit = d_bres %>% filter(Mitosis != 88)
+ggplot(d_mit, aes(x= Breslow,y = Mitosis)) + geom_point()
+```
+
+```{r}
+describe(d_bres$Breslow)
+```
+
+```{r}
+d_bres %>%
+  ggplot(aes(x = Recaida, y = Breslow, fill = Recaida)) + geom_boxplot() 
+```
+
+```{r}
+data %>% ggplot(aes(x = Grupo_etiopatogénico, y = Edad, fill=Grupo_etiopatogénico)) + 
+  geom_boxplot() + scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.1) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + ggtitle('Distribución de edad según el grupo etiopatogénico')
+```
+
+```{r}
+data %>% ggplot(aes(x = Loc, y = Edad, fill=Loc)) + 
+  geom_boxplot() + scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.1) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + ggtitle('Distribución de edad según la zona afectadad')
+```
+
+```{r}
+
+data %>% ggplot(aes(x = Fototipo, y = Edad, fill=Fototipo)) + 
+  geom_boxplot() + scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.1) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + ggtitle('Distribución de edad según el fototipo')
+```
+
+```{r}
+d1 = data %>% filter(!is.na(Estadio_patológico)) 
+d1 %>% ggplot(aes(x = Estadio_patológico, y = Edad, fill=Estadio_patológico)) + 
+  geom_boxplot() + scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    geom_jitter(color="black", size=0.4, alpha=0.1) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + ggtitle('Distribución de edad según el estadio patológico')
+```
+
+
+Investigación de la presencia de quemaduras según el fototipo
+```{r}
+describe(data$Fototipo)
+table(data$Fototipo, data$Quemaduras)
+```
+
+```{r}
+library(ggplot2)
+library(ggridges)
+
+ggplot(d_bres, 
+       aes(x = Breslow, 
+           y = Fototipo, 
+           fill = Fototipo)) +
+  geom_density_ridges() + 
+  theme_ridges() +
+  labs("Breslow por fototipo") +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+data %>% filter(Estadio_patológico != 88) %>%
+    ggplot(aes(Estadio_patológico)) +
+    geom_bar(aes(fill = Exitus)) +  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+
+## Análisis de las variables continuas
+```{r}
+data = data %>% filter(Breslow!= 88 & IMC != 88) 
+ggplot(data, aes(x=Altura, y=Peso) ) +
+  stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE) +
+  scale_fill_distiller(palette= "Spectral", direction=1) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme(legend.position='none') + labs(title ='Concentración de pacientes por altura y peso') + xlab("Altura (m)") + ylab("Peso (kg)")
+
+```
+
+
+```{r}
+ggplot(d_bres, 
+       aes(y = Fototipo, 
+           x = Breslow)) +
+  geom_point() + 
+  labs(title = "Breslow distribution by fototype")
+```
+
+#Matriz de correlación para variables continuas
+
+```{r}
+library(ggcorrplot)
+data %>%
+    select("Edad","Peso","Altura","IMC","Añosprofsol","Añospaquete","Breslow","Mitosis") %>%
+    cor %>% 
+    ggcorrplot()
+```
+
+
+```{r}
+library(GGally)
+contVars = data[,c("Edad","IMC","Añosprofsol","Añospaquete","Breslow","Mitosis")]
+ggpairs(contVars, title="Correlograma de las variables continuas") 
+```
+
+```{r}
+data %>% filter(Breslow != 88) %>%
+    ggplot(aes(Edad, Breslow)) +
+    geom_point() +
+    theme_minimal() +
+    labs(title = "Relationship between age and breslow")
+```
+
+```{r}
+library(plotly)
+
+data = data %>% mutate(Sexo= recode(Sexo, 
+                         `1` = "Hombre",                         
+                         `2` = "Mujer",
+                         ))
+
+p = data %>% mutate(text = paste("IMC: ", IMC, "\nEdad: ", Edad,"\nSexo : ", Sexo,"\nBreslow (mm): ",Breslow, sep="")) %>%
+ggplot(aes(x=Altura, y=Peso, size = Añospaquete, color = Sexo, text=text)) +
+    geom_point(alpha=0.7) +
+    scale_size(range = c(1.4, 19)) +
+    scale_color_viridis(discrete=TRUE, guide=FALSE) +
+    theme_ipsum() + theme(legend.position="none") + xlab("Altura (m)") + ylab("Peso (kg)") 
+
+# turn ggplot interactive with plotly
+pp <- ggplotly(p, tooltip="text")
+pp
+```
+
+
+### Reglas de asociación
+
+```{r}
+library(arules)
+library(arulesViz)
+
+d_rules = data[,c("Recaida","Quemaduras","Nevuspre","Ulceración","Sexo", "Fototipo", "Grupo_etiopatogénico","Loc","CancerFam","Ojos","Pelo")]
+d_rules = d_rules %>% filter(Recaida != 88 & Quemaduras != 88 & Nevuspre != 88 & Ulceración != 88 & Sexo != 88 & Fototipo != 88 & Grupo_etiopatogénico != 88, CancerFam != 88)
+
+reglas = apriori(d_rules)
+
+ordenadas=sort(reglas, by='lift')
+reglasFiltr = ordenadas[!is.redundant(ordenadas)]
+inspect(reglasFiltr)
+
+
+
+
+
+
+
+```
+
+
+```{r}
+reglas2 = apriori(d_rules, parameter=list(supp=0.3, conf=0.80)) 
+ordenadas=sort(reglas2, by='lift')
+
+quality(ordenadas) = round(quality(ordenadas), digits = 3)
+inspect(ordenadas) 
+#No redundantes
+
+reglasFiltr = ordenadas[!is.redundant(ordenadas)]
+inspect(reglasFiltr)
+
+
+
+```
+
+
+```{r}
+prop.table(table(data$Exitus, data$Estadio_patológico), margin=2)*100
+prop.table(table(data$Exitus, data$Ganglio_centinela), margin=2)*100
+```
+
+```{r}
+data %>% ggplot(aes(y = Breslow)) + geom_boxplot()
+```
+
+```{r}
+data = data %>% filter(Breslow != 88)
+data %>% ggplot(aes(Breslow)) +
+    geom_histogram(binwidth = 1, color = "black", fill = "darkolivegreen1") +
+    geom_vline(xintercept = mean(data$Breslow)) +
+    labs(title = "Distribución del Breslow ",
+         x = "Breslow (mm)",
+         y = "Number of patients") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(0,26))
+
+
+```
+
+```{r}
+data = data %>% filter(Mitosis != 88)
+data %>% ggplot(aes(Mitosis)) +
+    geom_histogram(binwidth = 2, color = "yellow2", fill = "violetred2") +
+    geom_vline(xintercept = mean(data$Mitosis)) +
+    labs(title = "Distribución Mitosis ",
+         x = "Mitosis",
+         y = "Number of patients") +
+    theme_minimal() +
+    scale_x_continuous(breaks = seq(0,100,2))
+```
+
+```{r}
+data %>%
+    ggplot() + geom_boxplot(aes(data$Añospaquete), fill = "goldenrod1") +
+    labs(title = "Distribution ",
+         x = "Number of patients",
+         y = "Añospaquete")
+```
