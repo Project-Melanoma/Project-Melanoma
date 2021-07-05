@@ -1,0 +1,154 @@
+---
+title: "Limpieza Melanoma"
+author: "Alex Muñoz"
+date: "1/7/2021"
+output: html_document
+---
+
+# LIMPIEZA MELANOMA
+
+### PREPROCESADO DE DATOS
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### LIBRERÍAS
+```{r}
+library(gplots)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(corrplot)
+library(plotly)
+library(stringr)
+library(tidyr)
+library(readr)
+library(lubridate)
+library(gridExtra)
+library(readxl)
+library(naniar)
+```
+### DATOS
+```{r}
+df = read_excel("C:/Users/Alex/Downloads/Melanoma_v2.xlsx", sheet="dades")
+```
+
+### TRATAMIENTO DE DATOS FALTANTES
+```{r}
+na_strings <- c(99,999)
+df_na = df %>% select(-Edad,-Peso, -Añospaquete)  %>% replace_with_na_at(.vars = c(colnames(df)),condition = ~.x %in% na_strings)
+```
+
+```{r}
+na_strings <- c(999)
+df_na_2 = df %>% select(Edad,Peso,Añospaquete)  %>% replace_with_na_at(.vars = c(colnames(df)),condition = ~.x %in% na_strings)
+```
+### TRATAMIENTO DE DATOS NO APLICABLES
+```{r}
+New_value <- 88
+df_na[df_na == 77|df_na == 888|df_na == 777]<- New_value
+```
+```{r}
+df_na_2[df_na_2 == 888|df_na_2 == 777]<- New_value
+```
+
+```{r}
+df2 = cbind(df_na_2,df_na)
+colnames(df2)
+```
+### ATRIBUTOS CON PORCENTAJE DE FALTANTES < 21%
+```{r}
+miss_var = as.data.frame(miss_var_summary(df2))
+miss_var = miss_var[miss_var$pct_mis < 21,]
+miss_var
+```
+
+```{r}
+df2 = df2[,miss_var$variable]
+colnames(df2)
+```
+### CAMBIOS Y REESTRUCTURACIÓN DE ATRIBUTOS
+```{r}
+names(df2)[names(df2) == "Nevus atípicos"] <- "Nevus_atipicos"
+names(df2)[names(df2) == "Múltiples melanomas"] <- "Multiples_melanomas"
+names(df2)[names(df2) == "Melanoma familiar"] <- "Melanoma_familiar"
+names(df2)[names(df2) == "Páncreas familiar"] <- "Pancreas_familiar"
+names(df2)[names(df2) == "Léntigos en área de MM"] <- "Lentigos_area_MM"
+names(df2)[names(df2) == "Grupo etiopatogénico"] <- "Grupo_etiopatogenico"
+names(df2)[names(df2) == "Invasión vascular"] <- "Invasion_vascular"
+names(df2)[names(df2) == "Ganglio centinela"] <- "Ganglio_centinela"
+names(df2)[names(df2) == "Estadio patológico"] <- "Estadio_patologico"
+names(df2)[names(df2) == "Pérdida de seguimiento"] <- "Perdida_seguimiento"
+names(df2)[names(df2) == "Léntigos"] <- "Lentigos"
+names(df2)[names(df2) == "Efélides"] <- "Efelides"
+names(df2)[names(df2) == "Qactínicas"] <- "Qactinicas"
+names(df2)[names(df2) == "Fotolocalización"] <- "Fotolocalizacion"
+names(df2)[names(df2) == "Localización"] <- "Localizacion"
+names(df2)[names(df2) == "Ulceración"] <- "Ulceracion"
+names(df2)[names(df2) == "Regresión"] <- "Regresion"
+names(df2)[names(df2) == "FActualización"] <- "FActualizacion"
+names(df2)[names(df2) == "Fecha_diagnóstico"] <- "Fecha_diagnostico"
+
+colnames(df2)
+```
+
+```{r}
+col_order = c('Sexo','Edad','Peso','Altura','Fototipo',
+              'Ojos','Pelo','Quemaduras','Añosprofsol','Añospaquete','Efelides','Lentigos',
+              'Qactinicas','Segtumor','CBC','CEC','Nevus','Nevus_atipicos','Multiples_melanomas',
+              'Melanoma_familiar','Pancreas_familiar','CancerFam','MC1Rvar','MC1R_RHC',
+              'Quemaduras_areaMM','Lentigos_area_MM','Localizacion','Fotolocalizacion',
+              'TipoHX','Nevuspre','Grupo_etiopatogenico','Breslow',
+              'Ulceracion','Satelitosis','Mitosis','Regresion','Invasion_vascular','Ganglio_centinela',
+              'Estadio_patologico','Estadio','Fecha_diagnostico','Recaida','FActualizacion',
+              'Perdida_seguimiento','Exitus','ExitusMM','ExitusOtras')
+
+df2 = df2[,col_order]
+```
+### EXTRACCIÓN DE VARIABLES SIN DATOS FALTANTES
+
+```{r}
+miss_var = as.data.frame(miss_var_summary(df2))
+miss_var = miss_var[miss_var$pct_mis > 0,]
+miss_var
+```
+### CONVERSIÓN DE VARIABLES A TIPO DE DATO CORRECTO
+
+```{r}
+library(dplyr)
+df_impu = df2[,miss_var$variable]
+df_impu_cat = df_impu%>%dplyr::select(-Añospaquete, -Añosprofsol,-Edad, -Mitosis, -Altura, -Peso, -Breslow,-FActualizacion)
+df_impu$FActualizacion = as.Date(df_impu$FActualizacion)
+df_impu[,colnames(df_impu_cat)] <- lapply(df_impu[colnames(df_impu_cat)], factor)
+str(df_impu)
+```
+##IMPUTACIÓN DE DATOS
+
+### ESTIMACIÓN DE DATOS FALTANTES
+
+Los métodos de estimación por tipo de datos han sido:
+- pmm (predictive mean matching) datos numéricos. 
+- logreg (logistic regression imputation) datos binarios, factores con 2 niveles.  
+- polyreg (polytomous regression imputation) datos categóricos con más de 2 niveles. 
+```{r}
+library(mice)
+df_impu$FActualizacion = NULL
+pred = quickpred(df_impu)
+imp = mice(df_impu, print = FALSE, maxit = 1, m = 3, seed = 1, remove.collinear = FALSE, pred=pred)
+```
+###  VISUALIZACIÓN DE LAS ESTIMACIONES PARA LAS VARIABLES NUMÉRICAS
+```{r}
+stripplot(imp)
+```
+### EXTRACCIÓN DE DATOS IMPUTADOS Y SUSTITUCIÓN EN BD ORIGINAL
+
+```{r}
+df2[,colnames(df_impu)] = imp.comp
+```
+
+### CREACIÓN NUEVA HOJA EXCEL
+
+```{r}
+library(xlsx)
+write.xlsx(df2, file = "Melanoma_v3.xlsx", sheetName = "dades", append=FALSE)
+```
